@@ -23,6 +23,8 @@
 	},
 	"dependencies": {
 		"@google/generative-ai": "^0.24.1",
-		"p-map": "^5.0.0"
+		"p-map": "^5.0.0",
+		"ts-textrank": "^1.0.3",
+		"stopword": "^0.3.4"
 	}
 }

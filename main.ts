@@ -1,6 +1,13 @@
 import { App, Editor, MarkdownView, Notice, Plugin, PluginSettingTab, Setting, TFile } from 'obsidian';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, SchemaType } from "@google/generative-ai";
 import pMap from 'p-map';
+import {
+	SorensenDiceSimilarity,
+	DefaultTextParser,
+	Summarizer,
+	AbsoluteSummarizerConfig,
+	NullLogger // Or ConsoleLogger for debugging
+} from 'ts-textrank';
 
 // Remember to rename these classes and interfaces!
 
@@ -146,45 +153,49 @@ export default class GeminiTitleGeneratorPlugin extends Plugin {
 		}
 
 		try {
-			// 1. Extract sentences using built-in logic
-			// Split by common sentence terminators. This regex tries to be a bit smart about not splitting on e.g. "Mr."
-			// It looks for a period, question mark, or exclamation mark, possibly followed by quotes, and then whitespace or end of string.
-			const sentenceEndRegex = /(?<!\b(?:Mr|Mrs|Ms|Dr|Sr|Jr|Inc|Ltd|Co|e\.g|i\.e|etc)\.)[.?!]['"]?(?=\s+|$)/g;
-			let sentences = noteContent.split(sentenceEndRegex);
-
-			// The split will include the delimiters themselves as separate array elements if they are captured,
-			// or it might create empty strings. We need to clean this up.
-			// A simpler split and then re-adding delimiter might be:
-			// sentences = noteContent.replace(/([.?!])\s*(?=[A-Z0-9"'])/g, "$1|").split("|");
-			// For now, let's try a simpler split and filter.
-			
-			sentences = noteContent.split(/[.?!]/g);
-
-
-			const validSentences = sentences
-				.map(s => s.trim()) // Trim whitespace
-				.filter(s => s.length > 0) // Filter out empty strings
-				.filter(s => s.split(/\s+/).length >= 3); // Filter out sentences with less than 3 words
-
+			// 1. Extract sentences using ts-textrank
 			let extractedSentences: string;
+			try {
+				const similarityFunction = new SorensenDiceSimilarity();
+				const parser = new DefaultTextParser();
+				const logger = new NullLogger(); // Use NullLogger to avoid console spam
+				// Damping factor (d) from TextRank paper, 0.85 is a common value.
+				// Sorting by occurrence to maintain some original flow for the prompt.
+				const config = new AbsoluteSummarizerConfig(
+					this.settings.numberOfSentences,
+					similarityFunction,
+					parser,
+					0.85,
+					Summarizer.SORT_OCCURENCE
+				);
+				const summarizer = new Summarizer(config, logger);
+				
+				// "en" for English stopwords. The 'stopword' package should handle this.
+				const summarySentences: string[] = summarizer.summarize(noteContent, "en");
 
-			if (validSentences.length > 0) {
-				const sentencesToUse = validSentences.slice(0, this.settings.numberOfSentences);
-				extractedSentences = sentencesToUse.join('. ') + (sentencesToUse.length > 0 ? '.' : '');
-			} else {
-				// Fallback: use the first 500 characters if no valid sentences found
+				if (summarySentences && summarySentences.length > 0) {
+					extractedSentences = summarySentences.join(' '); // Join the sentence strings directly
+				} else {
+					// Fallback: use the first 500 characters if ts-textrank returns no sentences
+					new Notice('ts-textrank found no key sentences, using the first 500 characters of the note for context.');
+					extractedSentences = noteContent.substring(0, 500);
+				}
+
+			} catch (summarizationError) {
+				new Notice('Error during sentence extraction with ts-textrank. Using fallback. Check console.');
+				console.error("ts-textrank summarization error:", summarizationError);
+				extractedSentences = noteContent.substring(0, 500); // Fallback on error
+			}
+
+
+			if (!extractedSentences || extractedSentences.trim().length === 0) {
 				if (noteContent.trim().length === 0) {
 					new Notice('Note is empty. Cannot generate title.');
 					return null;
 				}
-				new Notice('No distinct sentences found, using the first 500 characters of the note for context.');
-				extractedSentences = noteContent.substring(0, 500);
-			}
-			
-			if (!extractedSentences || extractedSentences.trim().length === 0) {
-				// This case should ideally be caught by the noteContent.trim().length check earlier
-				// or if the substring(0,500) results in an empty or whitespace-only string (highly unlikely for non-empty notes).
-				new Notice('Could not extract any content from the note to generate a title.');
+				// This notice might be redundant if the fallback was already announced,
+				// but good as a final check.
+				new Notice('Could not extract any meaningful content from the note to generate a title.');
 				return null;
 			}
 
