@@ -155,6 +155,12 @@ export default class GeminiTitleGeneratorPlugin extends Plugin {
 		try {
 			// 1. Extract sentences using ts-textrank
 			let extractedSentences: string;
+			// Preprocess noteContent to remove Obsidian image embedding lines
+			const imageEmbeddingRegex = /^!\[\[.*]]$/;
+			const lines = noteContent.split('\n');
+			const filteredLines = lines.filter(line => !imageEmbeddingRegex.test(line.trim()));
+			const processedNoteContent = filteredLines.join('\n');
+
 			try {
 				const similarityFunction = new SorensenDiceSimilarity();
 				const parser = new DefaultTextParser();
@@ -169,26 +175,33 @@ export default class GeminiTitleGeneratorPlugin extends Plugin {
 					Summarizer.SORT_OCCURENCE
 				);
 				const summarizer = new Summarizer(config, logger);
-				
+
 				// "en" for English stopwords. The 'stopword' package should handle this.
-				const summarySentences: string[] = summarizer.summarize(noteContent, "en");
+				// Use the processedNoteContent for summarization
+				const summarySentences: string[] = summarizer.summarize(processedNoteContent, "en");
 
 				if (summarySentences && summarySentences.length > 0) {
 					extractedSentences = summarySentences.join(' '); // Join the sentence strings directly
 				} else {
 					// Fallback: use the first 500 characters if ts-textrank returns no sentences
 					new Notice('ts-textrank found no key sentences, using the first 500 characters of the note for context.');
-					extractedSentences = noteContent.substring(0, 500);
+					// Use processedNoteContent for fallback as well if original noteContent was mostly images
+					// If processedNoteContent is empty (e.g. note only had images), use original noteContent for substring.
+					extractedSentences = processedNoteContent.trim() ? processedNoteContent.substring(0, 500) : noteContent.substring(0, 500);
 				}
 
 			} catch (summarizationError) {
 				new Notice('Error during sentence extraction with ts-textrank. Using fallback. Check console.');
 				console.error("ts-textrank summarization error:", summarizationError);
-				extractedSentences = noteContent.substring(0, 500); // Fallback on error
+				// Use processedNoteContent for fallback as well
+				// If processedNoteContent is empty (e.g. note only had images), use original noteContent for substring.
+				extractedSentences = processedNoteContent.trim() ? processedNoteContent.substring(0, 500) : noteContent.substring(0, 500); // Fallback on error
 			}
 
 
 			if (!extractedSentences || extractedSentences.trim().length === 0) {
+				// Check the original noteContent for emptiness, not the processed one,
+				// as a note with only images would be empty after processing.
 				if (noteContent.trim().length === 0) {
 					new Notice('Note is empty. Cannot generate title.');
 					return null;
