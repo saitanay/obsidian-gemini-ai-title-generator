@@ -1,4 +1,4 @@
-import { App, Editor, MarkdownView, Notice, Plugin, PluginSettingTab, Setting, TFile } from 'obsidian';
+import { App, Editor, MarkdownView, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf } from 'obsidian';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, SchemaType } from "@google/generative-ai";
 import pMap from 'p-map';
 import {
@@ -15,19 +15,76 @@ interface GeminiTitleGeneratorSettings {
 	apiKey: string;
 	modelId: string;
 	numberOfSentences: number;
+	autoUpdateUntitledNotes: boolean;
 }
 
 const DEFAULT_PLUGIN_SETTINGS: GeminiTitleGeneratorSettings = {
 	apiKey: '',
 	modelId: 'gemini-2.5-flash-preview-04-17',
-	numberOfSentences: 5
+	numberOfSentences: 5,
+	autoUpdateUntitledNotes: false,
 }
 
 export default class GeminiTitleGeneratorPlugin extends Plugin {
 	settings: GeminiTitleGeneratorSettings;
+	private lastActiveFile: TFile | null = null;
+	private handleActiveLeafChangeBound = this.handleActiveLeafChange.bind(this);
 
 	async onload() {
 		await this.loadSettings();
+
+		this.app.workspace.onLayoutReady(async () => {
+			if (this.settings.autoUpdateUntitledNotes) {
+				const markdownLeaves = this.app.workspace.getLeavesOfType('markdown');
+				const untitledOpenFiles: TFile[] = [];
+
+				for (const leaf of markdownLeaves) {
+					if (leaf.view instanceof MarkdownView && leaf.view.file) {
+						const file = leaf.view.file;
+						if (file.basename.toLowerCase().startsWith("untitled")) {
+							untitledOpenFiles.push(file);
+						}
+					}
+				}
+
+				if (untitledOpenFiles.length > 0) {
+					let updatedTitlesCount = 0;
+					const mapper = async (fileToUpdate: TFile) => {
+						try {
+							// Check again if it's still untitled, in case it was renamed
+							const currentFileState = this.app.vault.getAbstractFileByPath(fileToUpdate.path) as TFile;
+							if (!currentFileState || !currentFileState.basename.toLowerCase().startsWith("untitled")) {
+								console.log(`GeminiTitleGenerator: Note ${fileToUpdate.basename} is no longer untitled or found. Skipping startup update.`);
+								return;
+							}
+
+							new Notice(`Auto-updating title for open note: "${currentFileState.basename}"...`);
+							const noteContent = await this.app.vault.cachedRead(currentFileState);
+							if (!noteContent.trim()) {
+								new Notice(`Note "${currentFileState.basename}" is empty. Skipping auto-title on startup.`);
+								return;
+							}
+							const generatedTitle = await this.generateTitle(noteContent);
+							if (generatedTitle) {
+								const wasUpdated = await this.updateNoteTitle(currentFileState, generatedTitle);
+								if (wasUpdated) {
+									updatedTitlesCount++;
+								}
+							}
+						} catch (error) {
+							new Notice(`Error auto-updating title for "${fileToUpdate.basename}" on startup. Check console.`);
+							console.error(`GeminiTitleGenerator: Error auto-updating title for ${fileToUpdate.path} on startup:`, error);
+						}
+					};
+					await pMap(untitledOpenFiles, mapper, { concurrency: 1 });
+					if (updatedTitlesCount > 0) {
+						new Notice(`Gemini: Updated titles for ${updatedTitlesCount} untitled note(s) on startup.`);
+					}
+				}
+			}
+		});
+
+		this.app.workspace.on('active-leaf-change', this.handleActiveLeafChangeBound);
 
 		// Add command to generate title for the current note
 		this.addCommand({
@@ -135,7 +192,45 @@ export default class GeminiTitleGeneratorPlugin extends Plugin {
 	}
 
 	onunload() {
+		this.app.workspace.off('active-leaf-change', this.handleActiveLeafChangeBound);
+	}
 
+	async handleActiveLeafChange(newLeaf: WorkspaceLeaf | null): Promise<void> {
+		const previousFile = this.lastActiveFile;
+
+		if (newLeaf && newLeaf.view instanceof MarkdownView && newLeaf.view.file) {
+			this.lastActiveFile = newLeaf.view.file;
+		} else {
+			this.lastActiveFile = null;
+		}
+
+		if (!this.settings.autoUpdateUntitledNotes || !previousFile) {
+			return;
+		}
+
+		// Check if the file still exists in the vault
+		if (!this.app.vault.getAbstractFileByPath(previousFile.path)) {
+			console.log(`GeminiTitleGenerator: Previous file ${previousFile.path} no longer exists. Skipping auto-title.`);
+			return;
+		}
+		
+		if (previousFile.basename.toLowerCase().startsWith("untitled")) {
+			try {
+				new Notice(`Checking to auto-update title for "${previousFile.basename}"...`);
+				const noteContent = await this.app.vault.cachedRead(previousFile);
+				if (!noteContent.trim()) {
+					new Notice(`Note "${previousFile.basename}" is empty. Skipping auto-title.`);
+					return;
+				}
+				const generatedTitle = await this.generateTitle(noteContent);
+				if (generatedTitle) {
+					await this.updateNoteTitle(previousFile, generatedTitle);
+				}
+			} catch (error) {
+				new Notice(`Error auto-updating title for "${previousFile.basename}". Check console.`);
+				console.error(`GeminiTitleGenerator: Error auto-updating title for ${previousFile.path}:`, error);
+			}
+		}
 	}
 
 	async loadSettings() {
@@ -290,10 +385,10 @@ export default class GeminiTitleGeneratorPlugin extends Plugin {
 		}
 	}
 
-	async updateNoteTitle(file: TFile, newTitle: string) {
+	async updateNoteTitle(file: TFile, newTitle: string): Promise<boolean> {
 		if (!newTitle || newTitle.trim() === '') {
 			new Notice('Generated title is empty. No changes made.');
-			return;
+			return false;
 		}
 
 		// Sanitize the new title to be a valid filename
@@ -305,7 +400,7 @@ export default class GeminiTitleGeneratorPlugin extends Plugin {
 
 		if (!sanitizedTitle) {
 			new Notice('Sanitized title is empty. No changes made.');
-			return;
+			return false;
 		}
 		
 		const currentPath = file.path;
@@ -314,15 +409,17 @@ export default class GeminiTitleGeneratorPlugin extends Plugin {
 
 		if (currentPath === newPath) {
 			new Notice(`Note title is already "${sanitizedTitle}". No changes made.`);
-			return;
+			return false;
 		}
 
 		try {
 			await this.app.fileManager.renameFile(file, newPath);
 			new Notice(`Note title updated to: "${sanitizedTitle}"`);
+			return true;
 		} catch (error) {
 			new Notice('Error updating note title. Check console for details.');
 			console.error('Error renaming file:', error, { currentPath, newPath });
+			return false;
 		}
 	}
 }
@@ -381,6 +478,16 @@ class GeminiTitleGeneratorSettingTab extends PluginSettingTab {
 						// Optionally, revert to old value or handle error display
 						text.setValue(this.plugin.settings.numberOfSentences.toString());
 					}
+				}));
+		
+		new Setting(containerEl)
+			.setName('Auto update title for untitled notes')
+			.setDesc('When enabled, if you switch away from or close a note whose title starts with "Untitled", the plugin will attempt to generate and set a new title automatically.')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.autoUpdateUntitledNotes)
+				.onChange(async (value) => {
+					this.plugin.settings.autoUpdateUntitledNotes = value;
+					await this.plugin.saveSettings();
 				}));
 	}
 }
