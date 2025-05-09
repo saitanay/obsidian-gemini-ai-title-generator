@@ -9,7 +9,6 @@ import {
 	NullLogger // Or ConsoleLogger for debugging
 } from 'ts-textrank';
 
-// Remember to rename these classes and interfaces!
 
 interface GeminiTitleGeneratorSettings {
 	apiKey: string;
@@ -21,7 +20,7 @@ interface GeminiTitleGeneratorSettings {
 const DEFAULT_PLUGIN_SETTINGS: GeminiTitleGeneratorSettings = {
 	apiKey: '',
 	modelId: 'gemini-2.5-flash-preview-04-17',
-	numberOfSentences: 5,
+	numberOfSentences: 8,
 	autoUpdateUntitledNotes: false,
 }
 
@@ -54,7 +53,6 @@ export default class GeminiTitleGeneratorPlugin extends Plugin {
 							// Check again if it's still untitled, in case it was renamed
 							const currentFileState = this.app.vault.getAbstractFileByPath(fileToUpdate.path) as TFile;
 							if (!currentFileState || !currentFileState.basename.toLowerCase().startsWith("untitled")) {
-								console.log(`GeminiTitleGenerator: Note ${fileToUpdate.basename} is no longer untitled or found. Skipping startup update.`);
 								return;
 							}
 
@@ -73,7 +71,6 @@ export default class GeminiTitleGeneratorPlugin extends Plugin {
 							}
 						} catch (error) {
 							new Notice(`Error auto-updating title for "${fileToUpdate.basename}" on startup. Check console.`);
-							console.error(`GeminiTitleGenerator: Error auto-updating title for ${fileToUpdate.path} on startup:`, error);
 						}
 					};
 					await pMap(untitledOpenFiles, mapper, { concurrency: 1 });
@@ -89,7 +86,7 @@ export default class GeminiTitleGeneratorPlugin extends Plugin {
 		// Add command to generate title for the current note
 		this.addCommand({
 			id: 'gemini-generate-title',
-			name: 'Gemini Generate Title: Generate Title',
+			name: 'Generate Title with Gemini AI',
 			editorCallback: async (editor: Editor, view: MarkdownView) => {
 				if (view.file) {
 					const noteContent = editor.getValue();
@@ -120,7 +117,7 @@ export default class GeminiTitleGeneratorPlugin extends Plugin {
 				if (file instanceof TFile && file.extension === 'md') {
 					menu.addItem((item) => {
 						item
-							.setTitle("Gemini: Generate title for this note")
+							.setTitle("Generate Title with Gemini AI")
 							.setIcon("sparkles")
 							.onClick(async () => {
 								try {
@@ -136,7 +133,6 @@ export default class GeminiTitleGeneratorPlugin extends Plugin {
 									}
 								} catch (e) {
 									new Notice(`Error processing file "${file.basename}". Check console.`);
-									console.error(`Error in file-menu title generation for ${file.path}:`, e);
 								}
 							});
 					});
@@ -154,7 +150,7 @@ export default class GeminiTitleGeneratorPlugin extends Plugin {
 				if (markdownFiles.length > 0) {
 					menu.addItem((item) => {
 						item
-							.setTitle(`Gemini: Generate titles for ${markdownFiles.length} notes`)
+							.setTitle(`Generate Titles using Gemini AI`)
 							.setIcon("sparkles")
 							.onClick(async () => {
 								if (markdownFiles.length === 0) {
@@ -177,7 +173,6 @@ export default class GeminiTitleGeneratorPlugin extends Plugin {
 										}
 									} catch (e) {
 										new Notice(`Error processing file "${mdFile.basename}". Check console.`);
-										console.error(`Error in files-menu title generation for ${mdFile.path}:`, e);
 									}
 								};
 
@@ -210,7 +205,6 @@ export default class GeminiTitleGeneratorPlugin extends Plugin {
 
 		// Check if the file still exists in the vault
 		if (!this.app.vault.getAbstractFileByPath(previousFile.path)) {
-			console.log(`GeminiTitleGenerator: Previous file ${previousFile.path} no longer exists. Skipping auto-title.`);
 			return;
 		}
 		
@@ -228,7 +222,6 @@ export default class GeminiTitleGeneratorPlugin extends Plugin {
 				}
 			} catch (error) {
 				new Notice(`Error auto-updating title for "${previousFile.basename}". Check console.`);
-				console.error(`GeminiTitleGenerator: Error auto-updating title for ${previousFile.path}:`, error);
 			}
 		}
 	}
@@ -287,7 +280,6 @@ export default class GeminiTitleGeneratorPlugin extends Plugin {
 
 			} catch (summarizationError) {
 				new Notice('Error during sentence extraction with ts-textrank. Using fallback. Check console.');
-				console.error("ts-textrank summarization error:", summarizationError);
 				// Use processedNoteContent for fallback as well
 				// If processedNoteContent is empty (e.g. note only had images), use original noteContent for substring.
 				extractedSentences = processedNoteContent.trim() ? processedNoteContent.substring(0, 500) : noteContent.substring(0, 500); // Fallback on error
@@ -313,7 +305,6 @@ export default class GeminiTitleGeneratorPlugin extends Plugin {
 
 			const prompt = `Based on the following key sentences, provide a single, concise title for a note. The title should be 10 words or less. Key sentences: "${extractedSentences}"`;
 			
-			console.log("Gemini API Prompt:", prompt); // Log the prompt for debugging
 
 			const titleSchema = {
 				type: SchemaType.OBJECT, // This should be correct if SchemaType.OBJECT is a valid member
@@ -354,33 +345,26 @@ export default class GeminiTitleGeneratorPlugin extends Plugin {
 			});
 
 			if (result.response) {
-				console.log("Gemini API Result:", result); // Log the entire result object
-				console.log("Gemini API Response:", result.response); // Log the entire response object
 				const responseText = result.response.text();
-				console.log("Gemini Raw Response:", responseText); // Log the raw response
 				try {
 					const jsonResponse = JSON.parse(responseText);
 					if (jsonResponse && jsonResponse.title && typeof jsonResponse.title === 'string') {
 						return jsonResponse.title.trim();
 					} else {
 						new Notice('Failed to get a valid title from Gemini JSON response.');
-						console.error('Gemini API Error: Invalid JSON structure or missing title field.', jsonResponse);
 						return null;
 					}
 				} catch (e) {
 					new Notice('Failed to parse Gemini JSON response for title.');
-					console.error('Gemini API Error: Could not parse JSON response.', responseText, e);
 					return null;
 				}
 			} else {
 				new Notice('Failed to generate title from Gemini API. No response.');
-				console.error('Gemini API Error: No response object', result);
 				return null;
 			}
 
 		} catch (error) {
 			new Notice('Error generating title. Check console for details.');
-			console.error('Gemini Title Generation Error:', error);
 			return null;
 		}
 	}
@@ -418,7 +402,6 @@ export default class GeminiTitleGeneratorPlugin extends Plugin {
 			return true;
 		} catch (error) {
 			new Notice('Error updating note title. Check console for details.');
-			console.error('Error renaming file:', error, { currentPath, newPath });
 			return false;
 		}
 	}
@@ -439,7 +422,7 @@ class GeminiTitleGeneratorSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Gemini API Key')
-			.setDesc('Enter your Gemini API Key.')
+			.setDesc('Enter your Gemini API Key. Get this from https://aistudio.google.com/app/apikey')
 			.addText(text => {
 				text
 					.setPlaceholder('Enter your API Key')
@@ -453,9 +436,9 @@ class GeminiTitleGeneratorSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Gemini Model ID')
-			.setDesc('Enter the Gemini Model ID to use for title generation.')
+			.setDesc('Enter the Gemini Model ID to use for title generation. Example: gemini-2.5-flash-preview-04-17')
 			.addText(text => text
-				.setPlaceholder('e.g., gemini-2.5-flash-preview-04-17')
+				.setPlaceholder('gemini-2.5-flash-preview-04-17')
 				.setValue(this.plugin.settings.modelId)
 				.onChange(async (value) => {
 					this.plugin.settings.modelId = value;

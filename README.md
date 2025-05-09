@@ -1,94 +1,55 @@
-# Obsidian Sample Plugin
+# Gemini Title Generator for Obsidian
 
-This is a sample plugin for Obsidian (https://obsidian.md).
+**Author:** Tanay Sai (https://tanay.co.in)
 
-This project uses TypeScript to provide type checking and documentation.
-The repo depends on the latest plugin API (obsidian.d.ts) in TypeScript Definition format, which contains TSDoc comments describing what it does.
+An Obsidian plugin that leverages the Google Gemini API to automatically or manually generate titles for your notes based on their content. It helps streamline your note-taking workflow by ensuring your notes are always aptly named.
 
-This sample plugin demonstrates some of the basic functionality the plugin API can do.
-- Adds a ribbon icon, which shows a Notice when clicked.
-- Adds a command "Open Sample Modal" which opens a Modal.
-- Adds a plugin setting tab to the settings page.
-- Registers a global click event and output 'click' to the console.
-- Registers a global interval which logs 'setInterval' to the console.
+## Key Features
 
-## First time developing plugins?
+*   **Automatic Title Generation:**
+    *   Automatically generates and sets titles for notes starting with "Untitled" when you switch away from them.
+    *   On startup, attempts to generate titles for any currently open "Untitled" notes.
+*   **Manual Title Generation:**
+    *   Generate a title for the currently active note using the command palette ("Gemini Title Generator : Generate Title").
+*   **Context Menu Integration:**
+    *   Right-click on a markdown file in the Obsidian file explorer to generate a title for that specific note.
+    *   Select multiple markdown files and right-click to generate titles for all selected notes in batch.
+*   **Configurable Settings:**
+    *   **Gemini API Key:** (Required) Your personal API key for accessing the Google Gemini API.
+    *   **Gemini Model ID:** Choose the specific Gemini model you wish to use (e.g., `gemini-1.5-flash-latest`).
+    *   **Number of Sentences for Summary:** Define how many key sentences from your note should be extracted and sent to the Gemini API for context when generating a title. This helps in providing a concise summary for better title suggestions.
+    *   **Auto update title for untitled notes:** Toggle to enable or disable the automatic title generation feature for notes named "Untitled...".
 
-Quick starting guide for new plugin devs:
 
-- Check if [someone already developed a plugin for what you want](https://obsidian.md/plugins)! There might be an existing plugin similar enough that you can partner up with.
-- Make a copy of this repo as a template with the "Use this template" button (login to GitHub if you don't see it).
-- Clone your repo to a local development folder. For convenience, you can place this folder in your `.obsidian/plugins/your-plugin-name` folder.
-- Install NodeJS, then run `npm i` in the command line under your repo folder.
-- Run `npm run dev` to compile your plugin from `main.ts` to `main.js`.
-- Make changes to `main.ts` (or create new `.ts` files). Those changes should be automatically compiled into `main.js`.
-- Reload Obsidian to load the new version of your plugin.
-- Enable plugin in settings window.
-- For updates to the Obsidian API run `npm update` in the command line under your repo folder.
+## Usage
 
-## Releasing new releases
+1.  **Obtain a Gemini API Key:**
+    *   Visit the [Google AI Studio](https://aistudio.google.com/app/apikey) (or your Google Cloud Console) to create and obtain an API key for the Gemini API.
+2.  **Configure the Plugin:**
+    *   Open Obsidian Settings.
+    *   Navigate to "Gemini Title Generator" under the "Community Plugins" section.
+    *   Enter your Gemini API Key in the designated field.
+    *   Adjust other settings like Model ID and Number of Sentences as per your preference.
+3.  **Generating Titles:**
+    *   **Automatically:** If "Auto update title for untitled notes" is enabled, simply create a new note (it will likely be named "Untitled"). Add some content, and when you switch to another note or close it, the plugin will attempt to generate and set a title.
+    *   **Manually (Command Palette):** While a note is active, open the command palette (usually `Cmd/Ctrl+P`) and search for "Gemini Title Generator : Generate Title". Select it to generate a title for the current note.
+    *   **Manually (File Explorer):**
+        *   Right-click on a single markdown file in the file explorer and select "Generate Title for this note".
+        *   Select multiple markdown files, right-click, and select "Generate Titles for X notes" (where X is the number of notes).
 
-- Update your `manifest.json` with your new version number, such as `1.0.1`, and the minimum Obsidian version required for your latest release.
-- Update your `versions.json` file with `"new-plugin-version": "minimum-obsidian-version"` so older versions of Obsidian can download an older version of your plugin that's compatible.
-- Create new GitHub release using your new version number as the "Tag version". Use the exact version number, don't include a prefix `v`. See here for an example: https://github.com/obsidianmd/obsidian-sample-plugin/releases
-- Upload the files `manifest.json`, `main.js`, `styles.css` as binary attachments. Note: The manifest.json file must be in two places, first the root path of your repository and also in the release.
-- Publish the release.
+## Troubleshooting
 
-> You can simplify the version bump process by running `npm version patch`, `npm version minor` or `npm version major` after updating `minAppVersion` manually in `manifest.json`.
-> The command will bump version in `manifest.json` and `package.json`, and add the entry for the new version to `versions.json`
+*   **"Gemini API Key is not set" Notice:** Ensure you have entered your API key correctly in the plugin settings.
+*   **Title Generation Failures:**
+    *   Check your internet connection.
+    *   Ensure your Gemini API key is valid and has not exceeded its quota.
+    *   The note content might be too short or ambiguous for the AI to generate a meaningful title. Try adding more content.
+    *   Check the Obsidian developer console (View -> Toggle Developer Tools -> Console) for any error messages from the plugin.
 
-## Adding your plugin to the community plugin list
+## Privacy Considerations
 
-- Check the [plugin guidelines](https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines).
-- Publish an initial version.
-- Make sure you have a `README.md` file in the root of your repo.
-- Make a pull request at https://github.com/obsidianmd/obsidian-releases to add your plugin.
+This plugin sends the extracted key sentences from your note content to the Google Gemini API to generate titles. Please be aware of Google's data usage policies for the Gemini API. No data is stored by the plugin itself, other than your API key locally within your Obsidian configuration.
 
-## How to use
+## License
 
-- Clone this repo.
-- Make sure your NodeJS is at least v16 (`node --version`).
-- `npm i` or `yarn` to install dependencies.
-- `npm run dev` to start compilation in watch mode.
-
-## Manually installing the plugin
-
-- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
-
-## Improve code quality with eslint (optional)
-- [ESLint](https://eslint.org/) is a tool that analyzes your code to quickly find problems. You can run ESLint against your plugin to find common bugs and ways to improve your code. 
-- To use eslint with this project, make sure to install eslint from terminal:
-  - `npm install -g eslint`
-- To use eslint to analyze this project use this command:
-  - `eslint main.ts`
-  - eslint will then create a report with suggestions for code improvement by file and line number.
-- If your source code is in a folder, such as `src`, you can use eslint with this command to analyze all files in that folder:
-  - `eslint .\src\`
-
-## Funding URL
-
-You can include funding URLs where people who use your plugin can financially support it.
-
-The simple way is to set the `fundingUrl` field to your link in your `manifest.json` file:
-
-```json
-{
-    "fundingUrl": "https://buymeacoffee.com"
-}
-```
-
-If you have multiple URLs, you can also do:
-
-```json
-{
-    "fundingUrl": {
-        "Buy Me a Coffee": "https://buymeacoffee.com",
-        "GitHub Sponsor": "https://github.com/sponsors",
-        "Patreon": "https://www.patreon.com/"
-    }
-}
-```
-
-## API Documentation
-
-See https://github.com/obsidianmd/obsidian-api
+This plugin is released under the MIT License. See the [`LICENSE`](LICENSE) file for more details.

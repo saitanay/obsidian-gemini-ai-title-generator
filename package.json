@@ -8,8 +8,14 @@
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"version": "node version-bump.mjs && git add manifest.json versions.json"
 	},
-	"keywords": [],
-	"author": "",
+	"keywords": [
+		"obsidian",
+		"gemini",
+		"ai",
+		"title generator",
+		"automation"
+	],
+	"author": "Tanay Sai",
 	"license": "MIT",
 	"devDependencies": {
 		"@types/node": "^16.11.6",
