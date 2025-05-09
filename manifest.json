@@ -1,6 +1,6 @@
 {
-	"id": "gemini-title-generator",
-	"name": "Gemini Title Generator",
+	"id": "gemini-ai-title-generator",
+	"name": "Gemini AI Title Generator",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
 	"description": "Generates note titles using the Gemini API.",
