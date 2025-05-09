@@ -51,8 +51,20 @@ export default class GeminiTitleGeneratorPlugin extends Plugin {
 					const mapper = async (fileToUpdate: TFile) => {
 						try {
 							// Check again if it's still untitled, in case it was renamed
-							const currentFileState = this.app.vault.getAbstractFileByPath(fileToUpdate.path) as TFile;
-							if (!currentFileState || !currentFileState.basename.toLowerCase().startsWith("untitled")) {
+							const abstractFile = this.app.vault.getAbstractFileByPath(fileToUpdate.path);
+
+							// Check if the file exists and is an instance of TFile
+							if (!(abstractFile instanceof TFile)) {
+								// If abstractFile is null or not a TFile (e.g., a TFolder or deleted), we can't proceed.
+								// This implicitly handles the case where currentFileState would have been null.
+								return;
+							}
+
+							// Now we know abstractFile is a TFile.
+							const currentFileState: TFile = abstractFile;
+
+							// Proceed with the original check for "untitled"
+							if (!currentFileState.basename.toLowerCase().startsWith("untitled")) {
 								return;
 							}
 
